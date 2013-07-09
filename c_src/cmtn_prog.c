@@ -65,40 +65,40 @@ char** find_scripts(char *path, const char *extension) {
 int main(int argc, char *argv[])
 {
     void *status = NULL;
-    void *ctxt = mutton_new_context();
     bool ret = false;
     int rc;
     char *curr_working_dir = NULL;
-    char path[MAX_PATH_LEN];
+    char package_path[MAX_PATH_LEN];
+    char library_path[MAX_PATH_LEN];
     char script_path[MAX_PATH_LEN];
     char **scripts = NULL;
     char *emessage = NULL;
     char **curr_script = NULL;
+    void *ctxt = mutton_new_context();
 
     check(ctxt, "Well, that wasn't what we were expecting.");
 
     if(stat(DB_PATH, &st) == -1) {
         rc = mkdir(DB_PATH, 0770);
         check(rc == 0, "We didn't make the directory after all...");
-        printf("what was the return code: %d\n", rc);
-    } else {
-        printf("so we think that directory, %s, exists... HA!\n", DB_PATH);
     }
 
     ret = mutton_set_opt(ctxt, MTN_OPT_DB_PATH, (void *)DB_PATH, strlen(DB_PATH), &status);
     check(ret, "Could not set option for the database path...");
 
     curr_working_dir = getcwd(NULL, MAX_PATH_LEN);
-    strlcpy(path, curr_working_dir, MAX_PATH_LEN);
-    strlcat(path, LUA_PACKAGE_PATH, MAX_PATH_LEN);
-    printf("lua package path: %s\n", path);
+    strlcpy(package_path, curr_working_dir, MAX_PATH_LEN);
+    strlcat(package_path, LUA_PACKAGE_PATH, MAX_PATH_LEN);
 
-    ret = mutton_set_opt(ctxt, MTN_OPT_LUA_PATH, (void *)path,
-                        strlen(curr_working_dir), &status);
+    ret = mutton_set_opt(ctxt, MTN_OPT_LUA_PATH, (void *)package_path,
+                        strlen(package_path), &status);
     check(ret, "Could not set option for lua package path...");
 
-    ret = mutton_set_opt(ctxt, MTN_OPT_LUA_CPATH, (void *)LUA_LIB_PATH,
-                        strlen(LUA_LIB_PATH), &status);
+    strlcpy(library_path, curr_working_dir, MAX_PATH_LEN);
+    strlcat(library_path, LUA_LIB_PATH, MAX_PATH_LEN);
+
+    ret = mutton_set_opt(ctxt, MTN_OPT_LUA_CPATH, (void *)library_path,
+                        strlen(library_path), &status);
     check(ret, "Could not set option for lua library path...");
 
     ret = mutton_init_context(ctxt, &status);
@@ -111,30 +111,34 @@ int main(int argc, char *argv[])
     strlcpy(script_path, curr_working_dir, MAX_PATH_LEN);
     strlcat(script_path, LUA_SCRIPT_PATH, MAX_PATH_LEN);
 
-    printf("script path: %s\n", script_path);
-    printf("extension: %s\n", LUA_SCRIPT_EXT);
     scripts = find_scripts(script_path, LUA_SCRIPT_EXT);
     check(scripts, "Something went horribly wrong with finding the scripts...");
 
     for(curr_script = scripts; *curr_script; curr_script++) {
         char *basename = NULL;
         char *p = NULL;
-        const char *s;
+        int basename_len = 0;
 
-        printf("script: %s\n", *curr_script);
         basename = strrchr(*curr_script, '/') + sizeof(char);
-        p = strstr(basename, LUA_SCRIPT_EXT);
-        *p = '\0';
-        printf("basename: %s\n", basename);
-        s = malloc(strlen(curr_script) * sizeof(char));
-        strncpy(s, curr_script, strlen(curr_script));
+        basename_len = strlen(basename) - strlen(LUA_SCRIPT_EXT);
+        p = malloc((basename_len + 1) * sizeof(char));
+        strncpy(p, basename, basename_len);
+        p[basename_len] = '\0';
+        basename = p;
 
         ret = mutton_register_script_path(ctxt, MTN_SCRIPT_LUA, (void *)basename,
-                    strlen(basename), (void *)s, strlen(s),
+                    strlen(basename), (void *)(*curr_script), strlen(*curr_script),
                     &status);
         check(ret, "Could not register script paths correctly...");
-        free(s);
+        free(basename);
     }
+
+    ret = mutton_process_event_bucketed(ctxt, INDEX_PARTITION,
+                    (void *)BUCKET_NAME, strlen(BUCKET_NAME),
+                    (void *)BASIC_EVENT_NAME, strlen(BASIC_EVENT_NAME),
+                    (void *)BASIC_EVENT_JSON, strlen(BASIC_EVENT_JSON),
+                    &status);
+    check(ret, "Could not process the basic event... ");
 
     free(curr_working_dir);
     free(scripts);
@@ -147,9 +151,11 @@ error: // if we have an error in check(), we'll jump to here...
     mutton_status_get_message(ctxt, status, &emessage);
     printf("error msg: %s\n", emessage);
     free(emessage);
+
     // let's clean up before we exit:
     if(curr_working_dir) free(curr_working_dir);
     if(ctxt) mutton_free_context(ctxt);
+    if(status) mutton_free_status(status);
     if(scripts) free(scripts);
     return -1;
 }
