@@ -15,3 +15,11 @@
 *.exe
 *.out
 *.app
+
+# Editor files
+*~
+
+# App-specific... 
+tmp
+lua_scripts
+cmtn_prog*
