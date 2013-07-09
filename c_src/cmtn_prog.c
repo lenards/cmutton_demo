@@ -62,7 +62,7 @@ char** find_scripts(char *path, const char *extension) {
     return scripts;
 }
 
-int main(int argc, char *argv[])
+void *initialize_mutton()
 {
     void *status = NULL;
     bool ret = false;
@@ -133,21 +133,12 @@ int main(int argc, char *argv[])
         free(basename);
     }
 
-    ret = mutton_process_event_bucketed(ctxt, INDEX_PARTITION,
-                    (void *)BUCKET_NAME, strlen(BUCKET_NAME),
-                    (void *)BASIC_EVENT_NAME, strlen(BASIC_EVENT_NAME),
-                    (void *)BASIC_EVENT_JSON, strlen(BASIC_EVENT_JSON),
-                    &status);
-    check(ret, "Could not process the basic event... ");
-
     free(curr_working_dir);
     free(scripts);
-    mutton_free_context(ctxt);
 
-    return 0;
+    return ctxt;
 
-error: // if we have an error in check(), we'll jump to here...
-
+error:
     mutton_status_get_message(ctxt, status, &emessage);
     printf("error msg: %s\n", emessage);
     free(emessage);
@@ -157,5 +148,36 @@ error: // if we have an error in check(), we'll jump to here...
     if(ctxt) mutton_free_context(ctxt);
     if(status) mutton_free_status(status);
     if(scripts) free(scripts);
+    return NULL;
+}
+
+
+int main(int argc, char *argv[])
+{
+    void *status = NULL;
+    char *emessage = NULL;
+    bool ret = false;
+    void *ctxt = initialize_mutton();
+
+    check(ctxt, "Well, that wasn't what we were expecting.");
+
+    ret = mutton_process_event_bucketed(ctxt, INDEX_PARTITION,
+                    (void *)BUCKET_NAME, strlen(BUCKET_NAME),
+                    (void *)BASIC_EVENT_NAME, strlen(BASIC_EVENT_NAME),
+                    (void *)BASIC_EVENT_JSON, strlen(BASIC_EVENT_JSON),
+                    &status);
+    check(ret, "Could not process the basic event... ");
+
+    mutton_free_context(ctxt);
+
+    return 0;
+
+error: // if we have an error in check(), we'll jump to here...
+    mutton_status_get_message(ctxt, status, &emessage);
+    printf("error msg: %s\n", emessage);
+    free(emessage);
+    // let's clean up before we exit:
+    if(ctxt) mutton_free_context(ctxt);
+    if(status) mutton_free_status(status);
     return -1;
 }
