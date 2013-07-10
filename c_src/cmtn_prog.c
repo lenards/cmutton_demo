@@ -19,6 +19,8 @@ const static char* BUCKET_NAME = "planet-hoth";
 
 const static char* BASIC_EVENT_NAME = "basic";
 const static char* BASIC_EVENT_JSON = "{\"a_field\":\"TROLOLOL I'm an Event!!!\"}";
+const static char* BASIC_EVENT_JSON1 = "{\"a_field\":\"WHAT WHAT I'm a signup event!!!\"}";
+const static char* BASIC_EVENT_JSON2 = "{\"a_field\":\"Boo! I'm a cancellation event!!!\"}";
 
 const static char* LUA_SCRIPT_EXT = ".lua";
 const static char* LUA_SCRIPT_PATH = "/lua_scripts/";
@@ -166,7 +168,21 @@ int main(int argc, char *argv[])
                     (void *)BASIC_EVENT_NAME, strlen(BASIC_EVENT_NAME),
                     (void *)BASIC_EVENT_JSON, strlen(BASIC_EVENT_JSON),
                     &status);
-    check(ret, "Could not process the basic event... ");
+    check(ret, "Could not process the basic event 1... ");
+
+    ret = mutton_process_event_bucketed(ctxt, INDEX_PARTITION,
+                    (void *)BUCKET_NAME, strlen(BUCKET_NAME),
+                    (void *)BASIC_EVENT_NAME, strlen(BASIC_EVENT_NAME),
+                    (void *)BASIC_EVENT_JSON1, strlen(BASIC_EVENT_JSON1),
+                    &status);
+    check(ret, "Could not process the basic event 2... ");
+
+    ret = mutton_process_event_bucketed(ctxt, INDEX_PARTITION,
+                    (void *)BUCKET_NAME, strlen(BUCKET_NAME),
+                    (void *)BASIC_EVENT_NAME, strlen(BASIC_EVENT_NAME),
+                    (void *)BASIC_EVENT_JSON2, strlen(BASIC_EVENT_JSON2),
+                    &status);
+    check(ret, "Could not process the basic event 3... ");
 
     mutton_free_context(ctxt);
 
