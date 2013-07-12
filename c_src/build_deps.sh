@@ -12,6 +12,11 @@ case "$1" in
     rm -rf ../lua_scripts/*
     ;;
 
+  pull)
+    rm -rf mutton
+    git clone git@github.com:project-z/mutton.git mutton
+    ;;
+
   lua)
     echo "moving lua script over to the top level directory.... "
     if [ ! -d "../lua_scripts" ]; then

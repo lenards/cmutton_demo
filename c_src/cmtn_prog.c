@@ -1,11 +1,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
-#include <sys/stat.h>  // for stat() & mkdir()
+#include <sys/stat.h>   // for stat() & mkdir()
 #include <unistd.h>
 #include <stdbool.h>
 #include <string.h>
 #include <dirent.h>
+#include <libgen.h>     // for basename()
 
 #include "dbg.h"
 #include "libmutton/mutton.h"
@@ -21,14 +22,13 @@ const static char* BASIC_EVENT_NAME = "basic";
 const static char* BASIC_EVENT_JSON = "{\"a_field\":\"TROLOLOL I'm an Event!!!\"}";
 const static char* BASIC_EVENT_JSON1 = "{\"a_field\":\"WHAT WHAT I'm a signup event!!!\"}";
 const static char* BASIC_EVENT_JSON2 = "{\"a_field\":\"Boo! I'm a cancellation event!!!\"}";
+const static char* BASIC_EVENT_JSON3 = "{\"snarf_3\":\"sign-up; campaign=20130701\"}";
 
 const static char* LUA_SCRIPT_EXT = ".lua";
 const static char* LUA_SCRIPT_PATH = "/lua_scripts/";
 
 const static char* LUA_PACKAGE_PATH = "/lua_scripts/packages/?.lua";
 const static char* LUA_LIB_PATH = "/lua_scripts/lib/?";
-
-struct stat st = { 0 };
 
 
 char** find_scripts(char *path, const char *extension) {
@@ -51,7 +51,6 @@ char** find_scripts(char *path, const char *extension) {
 
                 strlcpy(scripts[i], path, malsize);
                 strlcat(scripts[i], ent->d_name, malsize);
-                printf("found one: %s\n", scripts[i]);
                 i++;
             }
         }
@@ -61,11 +60,14 @@ char** find_scripts(char *path, const char *extension) {
         return NULL;
     }
 
+    scripts[i] = NULL;
+
     return scripts;
 }
 
 void *initialize_mutton()
 {
+    struct stat st = { 0 };
     void *status = NULL;
     bool ret = false;
     int rc;
@@ -75,10 +77,23 @@ void *initialize_mutton()
     char script_path[MAX_PATH_LEN];
     char **scripts = NULL;
     char *emessage = NULL;
-    char **curr_script = NULL;
     void *ctxt = mutton_new_context();
 
     check(ctxt, "Well, that wasn't what we were expecting.");
+
+    curr_working_dir = getcwd(NULL, MAX_PATH_LEN);
+    strlcpy(package_path, curr_working_dir, MAX_PATH_LEN);
+    strlcat(package_path, LUA_PACKAGE_PATH, MAX_PATH_LEN);
+
+    strlcpy(library_path, curr_working_dir, MAX_PATH_LEN);
+    strlcat(library_path, LUA_LIB_PATH, MAX_PATH_LEN);
+
+    strlcpy(script_path, curr_working_dir, MAX_PATH_LEN);
+    strlcat(script_path, LUA_SCRIPT_PATH, MAX_PATH_LEN);
+
+    log_err("\n\npackage-path: %s \n", package_path);
+    log_err("\n\nlibrary-path: %s \n", library_path);
+    log_err("\n\n script-path: %s \n", script_path);
 
     if(stat(DB_PATH, &st) == -1) {
         rc = mkdir(DB_PATH, 0770);
@@ -88,16 +103,10 @@ void *initialize_mutton()
     ret = mutton_set_opt(ctxt, MTN_OPT_DB_PATH, (void *)DB_PATH, strlen(DB_PATH), &status);
     check(ret, "Could not set option for the database path...");
 
-    curr_working_dir = getcwd(NULL, MAX_PATH_LEN);
-    strlcpy(package_path, curr_working_dir, MAX_PATH_LEN);
-    strlcat(package_path, LUA_PACKAGE_PATH, MAX_PATH_LEN);
-
     ret = mutton_set_opt(ctxt, MTN_OPT_LUA_PATH, (void *)package_path,
                         strlen(package_path), &status);
     check(ret, "Could not set option for lua package path...");
 
-    strlcpy(library_path, curr_working_dir, MAX_PATH_LEN);
-    strlcat(library_path, LUA_LIB_PATH, MAX_PATH_LEN);
 
     ret = mutton_set_opt(ctxt, MTN_OPT_LUA_CPATH, (void *)library_path,
                         strlen(library_path), &status);
@@ -110,29 +119,21 @@ void *initialize_mutton()
         printf("well - you don't have to fall on your sword yet...\n");
     }
 
-    strlcpy(script_path, curr_working_dir, MAX_PATH_LEN);
-    strlcat(script_path, LUA_SCRIPT_PATH, MAX_PATH_LEN);
-
     scripts = find_scripts(script_path, LUA_SCRIPT_EXT);
     check(scripts, "Something went horribly wrong with finding the scripts...");
 
-    for(curr_script = scripts; *curr_script; curr_script++) {
-        char *basename = NULL;
+    for(int i = 0; scripts[i] != NULL; i++) {
+        char *base = NULL;
         char *p = NULL;
-        int basename_len = 0;
 
-        basename = strrchr(*curr_script, '/') + sizeof(char);
-        basename_len = strlen(basename) - strlen(LUA_SCRIPT_EXT);
-        p = malloc((basename_len + 1) * sizeof(char));
-        strncpy(p, basename, basename_len);
-        p[basename_len] = '\0';
-        basename = p;
+        base = basename(scripts[i]);
+        p = strrchr(base, '.');
+        *p ='\0';
 
-        ret = mutton_register_script_path(ctxt, MTN_SCRIPT_LUA, (void *)basename,
-                    strlen(basename), (void *)(*curr_script), strlen(*curr_script),
+        ret = mutton_register_script_path(ctxt, MTN_SCRIPT_LUA, (void *)base,
+                    strlen(base), (void *)(scripts[i]), strlen(scripts[i]),
                     &status);
         check(ret, "Could not register script paths correctly...");
-        free(basename);
     }
 
     free(curr_working_dir);
@@ -163,12 +164,20 @@ int main(int argc, char *argv[])
 
     check(ctxt, "Well, that wasn't what we were expecting.");
 
+    log_err("Missing directory here? ");
+
     ret = mutton_process_event_bucketed(ctxt, INDEX_PARTITION,
                     (void *)BUCKET_NAME, strlen(BUCKET_NAME),
                     (void *)BASIC_EVENT_NAME, strlen(BASIC_EVENT_NAME),
                     (void *)BASIC_EVENT_JSON, strlen(BASIC_EVENT_JSON),
                     &status);
     check(ret, "Could not process the basic event 1... ");
+
+    log_err("Missing directory here? ");
+    if (status != NULL) {
+        mutton_status_get_message(ctxt, status, &emessage);
+    }
+    log_err("status: %s\n", emessage);
 
     ret = mutton_process_event_bucketed(ctxt, INDEX_PARTITION,
                     (void *)BUCKET_NAME, strlen(BUCKET_NAME),
@@ -177,6 +186,8 @@ int main(int argc, char *argv[])
                     &status);
     check(ret, "Could not process the basic event 2... ");
 
+    log_err("Missing directory here? ");
+
     ret = mutton_process_event_bucketed(ctxt, INDEX_PARTITION,
                     (void *)BUCKET_NAME, strlen(BUCKET_NAME),
                     (void *)BASIC_EVENT_NAME, strlen(BASIC_EVENT_NAME),
@@ -184,7 +195,19 @@ int main(int argc, char *argv[])
                     &status);
     check(ret, "Could not process the basic event 3... ");
 
+    log_err("Well... we made it hear... ");
+
+    ret = mutton_process_event_bucketed(ctxt, INDEX_PARTITION,
+                    (void *)BUCKET_NAME, strlen(BUCKET_NAME),
+                    (void *)BASIC_EVENT_NAME, strlen(BASIC_EVENT_NAME),
+                    (void *)BASIC_EVENT_JSON3, strlen(BASIC_EVENT_JSON3),
+                    &status);
+    check(!ret, "Wait - what happened?!?!");
+    log_err("I'm confused... %s\n", (ret ? "true" : "false"));
+
     mutton_free_context(ctxt);
+
+    log_err("Are we segfaulting when we free the context???\n");
 
     return 0;
 
