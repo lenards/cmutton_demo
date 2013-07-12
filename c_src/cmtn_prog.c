@@ -164,8 +164,6 @@ int main(int argc, char *argv[])
 
     check(ctxt, "Well, that wasn't what we were expecting.");
 
-    log_err("Missing directory here? ");
-
     ret = mutton_process_event_bucketed(ctxt, INDEX_PARTITION,
                     (void *)BUCKET_NAME, strlen(BUCKET_NAME),
                     (void *)BASIC_EVENT_NAME, strlen(BASIC_EVENT_NAME),
@@ -173,11 +171,11 @@ int main(int argc, char *argv[])
                     &status);
     check(ret, "Could not process the basic event 1... ");
 
-    log_err("Missing directory here? ");
     if (status != NULL) {
         mutton_status_get_message(ctxt, status, &emessage);
+        log_err("status: %s\n", emessage);
     }
-    log_err("status: %s\n", emessage);
+
 
     ret = mutton_process_event_bucketed(ctxt, INDEX_PARTITION,
                     (void *)BUCKET_NAME, strlen(BUCKET_NAME),
@@ -186,16 +184,12 @@ int main(int argc, char *argv[])
                     &status);
     check(ret, "Could not process the basic event 2... ");
 
-    log_err("Missing directory here? ");
-
     ret = mutton_process_event_bucketed(ctxt, INDEX_PARTITION,
                     (void *)BUCKET_NAME, strlen(BUCKET_NAME),
                     (void *)BASIC_EVENT_NAME, strlen(BASIC_EVENT_NAME),
                     (void *)BASIC_EVENT_JSON2, strlen(BASIC_EVENT_JSON2),
                     &status);
     check(ret, "Could not process the basic event 3... ");
-
-    log_err("Well... we made it hear... ");
 
     ret = mutton_process_event_bucketed(ctxt, INDEX_PARTITION,
                     (void *)BUCKET_NAME, strlen(BUCKET_NAME),
